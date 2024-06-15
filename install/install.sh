@@ -633,6 +633,7 @@ function ADD_ALIAS(){
             gateway_domain=${gateway_domain:-$DEFAULT_GATEWAY}
             SETUP_ALIAS "$alias_domain" "$alias_origin" "$gateway_domain"
             UPDATE_TLS "$alias_domain"
+            INFO "${alias_domain} 别名仓库增加成功！"
             fi
 }
 function UPDATE_TLS() {
