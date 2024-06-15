@@ -585,8 +585,9 @@ EOF
 function ADD_GATEWAY(){
         default_gateway="crproxy:8080"
         INFO "======================= 配置域名 ======================="
-        WARN "配置前请确认域名的[@记录和*记录]已经解析到该服务器！"
-        read -e -p "$(INFO '请输入域名: ')" gateway_domain
+        WARN "网关域名是可以让你以增加前缀的方式拉取源仓库的镜像，配置前请确认域名的[@记录和*记录]已经解析到该服务器！"
+        
+        read -e -p "$(INFO '请输入域名(如:kubesre.xyz): ')" gateway_domain
         #read -e -p "$(INFO '请输入网关端点: '${default_gateway})" gateway_endpoint
         gateway_endpoint=${gateway_endpoint:-$default_gateway}
         SETUP_GATEWAY "$gateway_domain" "$gateway_endpoint"
@@ -626,8 +627,8 @@ function ADD_ALIAS(){
             else
             INFO "======================= 增加别名仓库 ======================="
             WARN "别名仓库是可以让你以替换前缀的方式拉取源仓库的镜像，配置前请确认域名的[*记录]已经解析到该服务器！"
-            read -e -p "$(INFO '请输入别名域名: 如:docker.kubesre.xyz')" alias_domain
-            read -e -p "$(INFO '请输入别名源: 如:docker.io')" alias_origin
+            read -e -p "$(INFO '请输入别名域名(如:docker.kubesre.xyz): ')" alias_domain
+            read -e -p "$(INFO '请输入别名源(如:docker.io): ')" alias_origin
             read -e -p "$(INFO '请输入网关域名: ')" gateway_domain
             SETUP_ALIAS "$alias_domain" "$alias_origin" "$gateway_domain"
             UPDATE_TLS "$alias_domain"
