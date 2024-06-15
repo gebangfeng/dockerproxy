@@ -56,8 +56,8 @@ GITRAW="https://raw.githubusercontent.com/gebangfeng/dockerproxy/main"
 
 # 部署的容器名称和镜像版本
 # CONTAINER_NAME_LIST=("reg-docker-hub" "reg-ghcr" "reg-k8s-gcr")
-IMAGE_NAME="gebangfeng/nginx-certbot"
-CRPROXY_IMAGE_NAME="gebangfeng/crproxy"
+IMAGE_NAME="ghcr.io/wzshiming/nginx-certbot"
+CRPROXY_IMAGE_NAME="ghcr.io/wzshiming/crproxy/crproxy"
 DOCKER_COMPOSE_FILE="docker-compose.yaml"
 # 定义常用仓库别名数组
 ALIASES=(

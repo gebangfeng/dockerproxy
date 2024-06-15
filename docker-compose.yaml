@@ -1,6 +1,6 @@
 services:
   gateway:
-    image: gebangfeng/nginx-certbot:v1.21.4
+    image: ghcr.io/wzshiming/nginx-certbot:v1.21.4
     container_name: gateway
     restart: unless-stopped
     volumes:
@@ -15,8 +15,7 @@ services:
       - "443:443"
 
   crproxy:
-    image: gebangfeng/crproxy:v0.7.0
-
+    image: ghcr.io/wzshiming/crproxy/crproxy:v0.1.0
     container_name: crproxy
     restart: unless-stopped
 
