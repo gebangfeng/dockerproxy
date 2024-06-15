@@ -678,9 +678,9 @@ wget -P ${PROXY_DIR}/ ${GITRAW}/docker-compose.yaml &>/dev/null
 # 安装服务
 START_CONTAINER
 }
-function GEN_NGINX_CONF() {
-    local domain=${DOMAIN}
-    local endpoint="crproxy:8080"
+function GEN(){
+    local domain=$1
+    local endpoint=$2
     cat <<EOF
 server {
     listen 80;
@@ -733,13 +733,15 @@ server {
     }
 }
 EOF
-
-conf="${PROXY_DIR}/nginx/gateway-${domain}.conf"
-
-if [[ ! -f "${conf}" ]]; then
-  mkdir -p nginx
-  gen "${domain}" "${endpoint}" >"${PROXY_DIR}/nginx/gateway-${domain}.conf"
-fi
+}
+function GEN_NGINX_CONF() {
+    local domain=${DOMAIN}
+    local endpoint="crproxy:8080"
+    conf="${PROXY_DIR}/nginx/gateway-${domain}.conf"
+    if [[ ! -f "${conf}" ]]; then
+    mkdir -p ${PROXY_DIR}/nginx
+    GEN "${domain}" "${endpoint}" > "${conf}"
+    fi
 }
 
 function UPDATE_TLS() {
