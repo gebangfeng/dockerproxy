@@ -441,6 +441,8 @@ if [[ ${common_alias_domain} -eq 1 ]]; then
     INFO "你已经添加常用别名仓库，也可以使用替换前缀方式拉取镜像: "
     INFO "源镜像拉取地址: docker pull quay.io/argoproj/argocd:v2.11.0"
     INFO "替换前缀拉取地址：docker pull quay.${gateway_domain}/argoproj/argocd:v2.11.0"
+    INFO 
+    INFO 
     INFO "别名仓库列表如下:"
     GETEWAY="${gateway_domain}"
     for alias in "${ALIASES[@]}"; do
