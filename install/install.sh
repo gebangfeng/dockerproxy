@@ -23,7 +23,7 @@ cat << EOF
 EOF
 
 echo "----------------------------------------------------------------------------------------------------------"
-echo -e "\033[32m机场推荐\033[0m(\033[34m按量不限时，解锁ChatGPT\033[0m)：\033[34;4mhttps://mojie.mx/#/register?code=CG6h8Irm\033[0m"
+# echo -e "\033[32m机场推荐\033[0m(\033[34m按量不限时，解锁ChatGPT\033[0m)：\033[34;4mhttps://mojie.mx/#/register?code=CG6h8Irm\033[0m"
 echo "----------------------------------------------------------------------------------------------------------"
 echo
 echo
@@ -625,8 +625,9 @@ function ADD_ALIAS(){
                 UPDATE_TLS "$alias_domain"
             else
             INFO "======================= 增加别名仓库 ======================="
-            read -e -p "$(INFO '请输入别名域名: ')" alias_domain
-            read -e -p "$(INFO '请输入别名源: ')" alias_origin
+            WARN "别名仓库是可以让你以替换前缀的方式拉取源仓库的镜像，配置前请确认域名的[*记录]已经解析到该服务器！"
+            read -e -p "$(INFO '请输入别名域名: 如:docker.kubesre.xyz')" alias_domain
+            read -e -p "$(INFO '请输入别名源: 如:docker.io')" alias_origin
             read -e -p "$(INFO '请输入网关域名: ')" gateway_domain
             SETUP_ALIAS "$alias_domain" "$alias_origin" "$gateway_domain"
             UPDATE_TLS "$alias_domain"
