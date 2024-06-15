@@ -55,11 +55,25 @@ cd "${PROXY_DIR}"
 GITRAW="https://raw.githubusercontent.com/gebangfeng/dockerproxy/main"
 
 # 部署的容器名称和镜像版本
-CONTAINER_NAME_LIST=("reg-docker-hub" "reg-ghcr" "reg-k8s-gcr")
-IMAGE_NAME="registry"
-UI_IMAGE_NAME="dqzboy/docker-registry-ui"
+# CONTAINER_NAME_LIST=("reg-docker-hub" "reg-ghcr" "reg-k8s-gcr")
+# IMAGE_NAME="registry"
+# UI_IMAGE_NAME="dqzboy/docker-registry-ui"
 DOCKER_COMPOSE_FILE="docker-compose.yaml"
-
+# 定义常用仓库别名数组
+ALIASES=(
+    "l5d cr.l5d.io"
+    "elastic docker.elastic.co"
+    "docker docker.io"
+    "gcr gcr.io"
+    "ghcr ghcr.io"
+    "k8s-gcr k8s.gcr.io"
+    "k8s registry.k8s.io"
+    "mcr mcr.microsoft.com"
+    "nvcr nvcr.io"
+    "quay quay.io"
+    "jujucharms registry.jujucharms.com"
+    "rocks-canonical rocks.canonical.com"
+)
 
 # 定义安装重试次数
 attempts=0
@@ -247,257 +261,6 @@ else
 fi
 }
 
-
-function INSTALL_CADDY() {
-INFO "====================== 安装Caddy ======================"
-# 定义一个函数来启动 Caddy
-start_caddy() {
-    systemctl enable caddy.service &>/dev/null
-    systemctl restart caddy.service
-}
-
-check_caddy() {
-# 检查 caddy 是否正在运行
-if pgrep "caddy" > /dev/null; then
-    INFO "Caddy 已在运行."
-else
-    WARN "Caddy 未运行。尝试启动 Caddy..."
-    start_attempts=3
-
-    # 最多尝试启动 3 次
-    for ((i=1; i<=$start_attempts; i++)); do
-        start_caddy
-        if pgrep "caddy" > /dev/null; then
-            INFO "Caddy已成功启动."
-            break
-        else
-            if [ $i -eq $start_attempts ]; then
-                ERROR "Caddy 在尝试 $start_attempts 后无法启动。请检查配置"
-                exit 1
-            else
-                WARN "在 $i 时间内启动 Caddy 失败。重试..."
-            fi
-        fi
-    done
-fi
-}
-
-if [ "$package_manager" = "dnf" ]; then
-    # 检查是否已安装Caddy
-    if which caddy &>/dev/null; then
-        INFO "Caddy 已经安装."
-    else
-        INFO "正在安装Caddy程序，请稍候..."
-
-        $package_manager -y install 'dnf-command(copr)' &>/dev/null
-        $package_manager -y copr enable @caddy/caddy &>/dev/null
-        while [ $attempts -lt $maxAttempts ]; do
-            $package_manager -y install caddy &>/dev/null
-
-            if [ $? -ne 0 ]; then
-                ((attempts++))
-                WARN "正在尝试安装Caddy >>> (Attempt: $attempts)"
-
-                if [ $attempts -eq $maxAttempts ]; then
-                    ERROR "Caddy installation failed. Please try installing manually."
-                    echo "命令: $package_manager -y install 'dnf-command(copr)' && $package_manager -y copr enable @caddy/caddy && $package_manager -y install caddy"
-                    exit 1
-                fi
-            else
-                INFO "已安装 Caddy."
-                break
-            fi
-        done
-    fi
-
-    # 启动caddy
-    check_caddy
-
-elif [ "$package_manager" = "yum" ]; then
-    # 检查是否已安装Caddy
-    if which caddy &>/dev/null; then
-        INFO "Caddy 已经安装."
-    else
-        INFO "正在安装Caddy程序，请稍候..."
-
-        $package_manager -y install yum-plugin-copr &>/dev/null
-        $package_manager -y copr enable @caddy/caddy &>/dev/null
-        while [ $attempts -lt $maxAttempts ]; do
-            $package_manager -y install caddy &>/dev/null
-            if [ $? -ne 0 ]; then
-                ((attempts++))
-                WARN "正在尝试安装Caddy >>> (Attempt: $attempts)"
-
-                if [ $attempts -eq $maxAttempts ]; then
-                    ERROR "Caddy installation failed. Please try installing manually."
-                    echo "命令: $package_manager -y install 'dnf-command(copr)' && $package_manager -y copr enable @caddy/caddy && $package_manager -y install caddy"
-                    exit 1
-                fi
-            else
-                INFO "已安装 Caddy."
-                break
-            fi
-        done
-    fi
-
-    # 启动caddy
-    check_caddy
-
-elif [ "$package_manager" = "apt" ] || [ "$package_manager" = "apt-get" ];then
-    dpkg --configure -a &>/dev/null
-    $package_manager update &>/dev/null
-    if $pkg_manager -s "caddy" &>/dev/null; then
-        INFO "Caddy 已安装，跳过..."
-    else
-        INFO "安装 Caddy 请稍等 ..."
-        $package_manager install -y debian-keyring debian-archive-keyring apt-transport-https &>/dev/null
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg &>/dev/null
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list &>/dev/null
-        $package_manager update &>/dev/null
-        $package_manager install -y caddy &>/dev/null
-        if [ $? -ne 0 ]; then
-            ERROR "安装 Caddy 失败,请检查系统安装源之后再次运行此脚本！请尝试手动执行安装：$package_manager -y install caddy"
-            exit 1
-        fi
-    fi
-
-    # 启动Caddy
-    check_caddy
-else
-    WARN "无法确定包管理系统."
-    exit 1
-fi
-
-
-INFO "====================== 配置Caddy ======================"
-while true; do
-    read -e -p "$(WARN '是否配置Caddy,实现自动HTTPS? 执行前必须提前在DNS服务商解析A记录ui、hub、gcr、ghcr、k8s-gcr、quay[y/n]: ')" caddy_conf
-    case "$caddy_conf" in
-        y|Y )
-            read -e -p "$(INFO '请输入你的域名[例: baidu.com],不可为空: ')" caddy_domain
-            wget -NP /etc/caddy/ ${GITRAW}/caddy/Caddyfile &>/dev/null
-            sed -i "s#your_domain_name#$caddy_domain#g" /etc/caddy/Caddyfile
-            # 重启服务
-            start_attempts=3
-            # 最多尝试启动 3 次
-            for ((i=1; i<=$start_attempts; i++)); do
-                start_caddy
-                if pgrep "caddy" > /dev/null; then
-                    INFO "重新载入配置成功.Caddy启动完成,现在你可以将不需要的A记录从DNS解析中删除了"
-                    break
-                else
-                    if [ $i -eq $start_attempts ]; then
-                        ERROR "Caddy 在尝试 $start_attempts 后无法启动。请检查配置"
-                        exit 1
-                    else
-                        WARN "在 $i 时间内启动 Caddy 失败。重试..."
-                    fi
-                fi
-            done
-
-            break;;
-        n|N )
-            WARN "退出配置 Caddy 操作。"
-            break;;
-        * )
-            INFO "请输入 'y' 表示是，或者 'n' 表示否。";;
-    esac
-done
-
-}
-
-
-function INSTALL_NGINX() {
-INFO "====================== 安装Nginx ======================"
-# 定义一个函数来启动 Nginx
-start_nginx() {
-    systemctl enable nginx &>/dev/null
-    systemctl restart nginx
-}
-
-check_nginx() {
-# 检查 Nginx 是否正在运行
-if pgrep "nginx" > /dev/null; then
-    INFO "Nginx 已在运行."
-else
-    WARN "Nginx 未运行。尝试启动 Nginx..."
-    start_attempts=3
-
-    # 最多尝试启动 3 次
-    for ((i=1; i<=$start_attempts; i++)); do
-        start_nginx
-        if pgrep "nginx" > /dev/null; then
-            INFO "Nginx已成功启动."
-            break
-        else
-            if [ $i -eq $start_attempts ]; then
-                ERROR "Nginx 在尝试 $start_attempts 次后无法启动。请检查配置"
-                exit 1
-            else
-                WARN "第 $i 次启动 Nginx 失败。重试..."
-            fi
-        fi
-    done
-fi
-}
-
-if [ "$package_manager" = "dnf" ] || [ "$package_manager" = "yum" ]; then
-    # 检查是否已安装Nginx
-    if which nginx &>/dev/null; then
-        INFO "Nginx 已经安装."
-    else
-        INFO "正在安装Nginx程序，请稍候..."
-        NGINX="nginx-1.24.0-1.el${OSVER}.ngx.x86_64.rpm"
-
-        # 下载并安装RPM包
-        rm -f ${NGINX}
-        wget http://nginx.org/packages/centos/${OSVER}/x86_64/RPMS/${NGINX} &>/dev/null
-        while [ $attempts -lt $maxAttempts ]; do
-            $package_manager -y install ${NGINX} &>/dev/null
-
-            if [ $? -ne 0 ]; then
-                ((attempts++))
-                WARN "正在尝试安装Nginx >>> (Attempt: $attempts)"
-
-                if [ $attempts -eq $maxAttempts ]; then
-                    ERROR "Nginx installation failed. Please try installing manually."
-                    rm -f ${NGINX}
-                    echo "命令: wget http://nginx.org/packages/centos/${OSVER}/x86_64/RPMS/${NGINX} && $package_manager -y install ${NGINX}"
-                    exit 1
-                fi
-            else
-                INFO "已安装 Nginx."
-                rm -f ${NGINX}
-                break
-            fi
-        done
-    fi
-
-    # 启动nginx
-    check_nginx
-
-elif [ "$package_manager" = "apt-get" ] || [ "$package_manager" = "apt" ];then
-    dpkg --configure -a &>/dev/null
-    $package_manager update &>/dev/null
-    if $pkg_manager -s "nginx" &>/dev/null; then
-        INFO "nginx 已安装，跳过..."
-    else
-        INFO "安装 nginx 请稍等 ..."
-        $package_manager install -y nginx > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
-            ERROR "安装 nginx 失败,请检查系统安装源之后再次运行此脚本！请尝试手动执行安装：$package_manager -y install nginx"
-            exit 1
-        fi
-    fi
-
-    # 启动nginx
-    check_nginx
-else
-    WARN "无法确定包管理系统."
-    exit 1
-fi
-}
-
 function INSTALL_DOCKER() {
 INFO "====================== 安装Docker ======================"
 # 定义存储库文件名
@@ -600,88 +363,119 @@ else
 fi
 }
 
-
-function DOWN_CONFIG() {
-    files=(
-        "dockerhub ${GITRAW}/config/docker-hub.yml"
-        "gcr ${GITRAW}/config/gcr.yml"
-        "ghcr ${GITRAW}/config/ghcr.yml"
-        "quay ${GITRAW}/config/quay.yml"
-        "k8sgcr ${GITRAW}/config/k8s-ghcr.yml"
-    )
-
-    selected_names=()
-
-    echo "-------------------------------------------------"
-    echo "1) docker hub"
-    echo "2) gcr"
-    echo "3) ghcr"
-    echo "4) quay"
-    echo "5) k8s-gcr"
-    echo "6) all"
-    echo "7) exit"
-    echo "-------------------------------------------------"
-
-    read -e -p "$(INFO '输入序号下载对应配置文件,空格分隔多个选项. all下载所有: ')" choices_reg
-
-    if [[ "$choices_reg" == "6" ]]; then
-        for file in "${files[@]}"; do
-            file_name=$(echo "$file" | cut -d' ' -f1)
-            file_url=$(echo "$file" | cut -d' ' -f2-)
-            selected_names+=("$file_name")
-            wget -NP ${PROXY_DIR}/ $file_url &>/dev/null
-        done
-        selected_all=true
-    elif [[ "$choices_reg" == "7" ]]; then
-        WARN "退出下载配置! 首次安装如果没有配置无法启动服务,只能启动UI服务"
-        return
-    else
-        for choice in ${choices_reg}; do
-            if [[ $choice =~ ^[0-9]+$ ]] && ((choice > 0 && choice <= ${#files[@]})); then
-                file_name=$(echo "${files[$((choice - 1))]}" | cut -d' ' -f1)
-                file_url=$(echo "${files[$((choice - 1))]}" | cut -d' ' -f2-)
-                selected_names+=("$file_name")
-                wget -NP ${PROXY_DIR}/ $file_url &>/dev/null
-            else
-                ERROR "无效的选择: $choice"
-                exit 1
-            fi
-        done
-        selected_all=false
-    fi
-}
-
 function START_CONTAINER() {
-    # if [ "$selected_all" = true ]; then
-    #     docker compose up -d --force-recreate
-    # else
-    #     docker compose up -d "${selected_names[@]}" registry-ui
-    # fi
     docker compose up -d --force-recreate
+    ADD_GATEWAY
+    INIT_ALIAS
 }
 
 function RESTART_CONTAINER() {
-    if [ "$selected_all" = true ]; then
-        docker compose restart
-    else
-        docker compose restart "${selected_names[@]}"
-    fi
+    docker compose restart
 }
 
 function INSTALL_DOCKER_PROXY() {
-INFO "======================= 开始安装Docker_proxy ======================="
+INFO "======================= 开始安装DOCKER PROXY ======================="
 wget -P ${PROXY_DIR}/ ${GITRAW}/docker-compose.yaml &>/dev/null
-
-# config
-# DOWN_CONFIG
 
 # 安装服务
 START_CONTAINER
 }
-function GEN(){
-    local domain=$1
-    local endpoint=$2
-    cat <<EOF
+
+function STOP_REMOVE_CONTAINER() {
+    if [[ -f "${PROXY_DIR}/${DOCKER_COMPOSE_FILE}" ]]; then
+        INFO "停止和移除所有容器"
+        docker compose -f "${PROXY_DIR}/${DOCKER_COMPOSE_FILE}" down --remove-orphans
+    else 
+        WARN "容器未运行，无需删除"
+        exit 1
+    fi
+}
+
+function REMOVE_NONE_TAG() {
+    docker images | grep "^${IMAGE_NAME}.*<none>" | awk '{print $3}' | xargs -r docker rmi
+    images=$(docker images ${IMAGE_NAME} --format '{{.Repository}}:{{.Tag}}')
+    latest=$(echo "$images" | sort -V | tail -n1)
+    for image in $images
+    do
+      if [ "$image" != "$latest" ];then
+        docker rmi $image
+      fi
+    done
+}
+
+function PACKAGE() {
+while true; do
+    read -e -p "$(INFO '是否执行软件包安装? [y/n]: ')" choice_package
+    case "$choice_package" in
+        y|Y )
+            INSTALL_PACKAGE
+            break;;
+        n|N )
+            WARN "跳过软件包安装步骤。"
+            break;;
+        * )
+            INFO "请输入 'y' 表示是，或者 'n' 表示否。";;
+    esac
+done
+}
+
+function PROMPT(){
+# # 获取公网IP
+# PUBLIC_IP=$(curl -s https://ifconfig.me)
+
+# # 获取所有网络接口的IP地址
+# ALL_IPS=$(hostname -I)
+
+# # 排除不需要的地址（127.0.0.1和docker0）
+# INTERNAL_IP=$(echo "$ALL_IPS" | awk '$1!="127.0.0.1" && $1!="::1" && $1!="docker0" {print $1}')
+
+echo
+INFO "=================感谢您的耐心等待，安装已经完成=================="
+INFO
+INFO "请用增加前缀 ${gateway_domain} 的方式拉取镜像 "
+INFO "源镜像拉取地址: docker pull quay.io/argoproj/argocd:v2.11.0"
+INFO "增加前缀拉取地址：docker pull ${gateway_domain}/quay.io/argoproj/argocd:v2.11.0"
+INFO
+INFO
+if [[ ${common_alias_domain} -eq 1 ]]; then
+    INFO "你已经添加常用别名仓库，也可以使用替换前缀方式拉取镜像: "
+    INFO "源镜像拉取地址: docker pull quay.io/argoproj/argocd:v2.11.0"
+    INFO "替换前缀拉取地址：docker pull quay.${gateway_domain}/argoproj/argocd:v2.11.0"
+    INFO "别名仓库列表如下:"
+    GETEWAY="${gateway_domain}"
+    for alias in "${ALIASES[@]}"; do
+        local name=$(echo $alias | cut -d' ' -f1)
+        local original=$(echo $alias | cut -d' ' -f2)
+        INFO "原仓库: ${original} 别名仓库:${name}.${gateway_domain}"
+    done
+fi
+INFO  
+INFO "代码仓库: https://github.com/gebangfeng/dockerproxy"
+INFO  
+INFO "如果使用的是云服务器，请在安全组中开放80,443端口"
+INFO
+INFO "================================================================"
+}
+
+function SETUP_GATEWAY() {
+    domain=${1:-}
+
+    if [[ -z "${domain}" ]]; then
+        ERROR "domain is required"
+        ADD_GATEWAY
+    fi
+
+    endpoint=${2:-}
+
+    if [[ -z "${endpoint}" ]]; then
+        ERROR "endpoint is required"
+        exit 1
+    fi
+
+    function gen() {
+        local domain=$1
+        local endpoint=$2
+        cat <<EOF
 server {
     listen 80;
     server_name ${domain};
@@ -709,21 +503,11 @@ server {
         index  index.html index.htm;
     }
 
-    #error_page  404              /404.html;
-
-    # redirect server error pages to the static page /50x.html
-    #
     error_page   500 502 503 504  /50x.html;
     location = /50x.html {
         root   /usr/share/nginx/html;
     }
 
-    # # (Options) docker.io uses aliyuncs mirror 😄
-    # location ~ ^/v2/docker.io/(.+)\$  {
-    #    return 302 https://public.mirror.aliyuncs.com/v2/\$1;
-    # }
-
-    # Read only, Reject all writes !!!!!!!!!!
     if (\$request_method !~* GET|HEAD) {
         return 403;
     }
@@ -733,221 +517,143 @@ server {
     }
 }
 EOF
-}
-function GEN_NGINX_CONF() {
-    local domain=${DOMAIN}
-    local endpoint="crproxy:8080"
+    }
+
     conf="${PROXY_DIR}/nginx/gateway-${domain}.conf"
+
     if [[ ! -f "${conf}" ]]; then
-    mkdir -p ${PROXY_DIR}/nginx
-    GEN "${domain}" "${endpoint}" > "${conf}"
+        mkdir -p ${PROXY_DIR}/nginx
+        gen "${domain}" "${endpoint}" >"${conf}"
     fi
 }
 
+function SETUP_ALIAS() {
+    domain=${1:-}
+
+    if [[ -z "${domain}" ]]; then
+        ERROR "domain is required"
+        exit 1
+    fi
+
+    origin=${2:-}
+
+    if [[ -z "${origin}" ]]; then
+        echo "origin is required"
+        exit 1
+    fi
+
+    gateway=${3:-}
+
+    if [[ -z "${gateway}" ]]; then
+        echo "gateway is required"
+        exit 1
+    fi
+
+    function gen() {
+        local domain=$1
+        local origin=$2
+        local gateway=$3
+        cat <<EOF
+server {
+    listen 80;
+    server_name ${domain};
+    server_tokens off;
+
+    access_log  /var/log/nginx/${domain}.access.log  main;
+
+    location = /v2/ {
+        default_type "application/json; charset=utf-8";
+        return 200 "{}";
+    }
+
+    location ~ ^/v2/(.+)\$ {
+        return 301 https://${gateway}/v2/${origin}/\$1;
+    }
+}
+EOF
+    }
+
+    conf="${PROXY_DIR}/nginx/alias-${domain}.conf"
+
+    if [ ! -f "${conf}" ]; then
+        mkdir -p ${PROXY_DIR}/nginx
+        gen "${domain}" "${origin}" "${gateway}" >"${conf}"
+    fi
+}
+function ADD_GATEWAY(){
+        default_gateway="crproxy:8080"
+        INFO "======================= 配置域名 ======================="
+        WARN "配置前请确认域名的[@记录和*记录]已经解析到该服务器！"
+        read -e -p "$(INFO '请输入域名: ')" gateway_domain
+        #read -e -p "$(INFO '请输入网关端点: '${default_gateway})" gateway_endpoint
+        gateway_endpoint=${gateway_endpoint:-$default_gateway}
+        SETUP_GATEWAY "$gateway_domain" "$gateway_endpoint"
+        UPDATE_TLS "$gateway_domain"
+        
+}
+function INIT_ALIAS(){
+    while true; do
+    read -e -p "$(INFO '是否配置常用仓库别名? [y/n]: ')" configure_alias_domain
+    case "$configure_alias_domain" in
+        y|Y )
+
+                INFO "======================= 增加常用别名仓库 ======================="
+                GETEWAY="${gateway_domain}"
+                for alias in "${ALIASES[@]}"; do
+                    local name=$(echo $alias | cut -d' ' -f1)
+                    local original=$(echo $alias | cut -d' ' -f2)
+                    ADD_ALIAS "${name}.${gateway_domain}" "${original}" "${GETEWAY}"
+                done
+                #常用别名仓库已经添加的标志
+                common_alias_domain=1
+                break;;
+        n|N )
+            break;;
+        * )
+            INFO "请输入 'y' 表示是，或者 'n' 表示否。";;
+        esac
+done
+}
+function ADD_ALIAS(){
+            if [ $# -eq 3 ]; then
+                alias_domain=$1
+                alias_origin=$2
+                gateway_domain=$3
+                SETUP_ALIAS "$alias_domain" "$alias_origin" "$gateway_domain"
+                UPDATE_TLS "$alias_domain"
+            else
+            INFO "======================= 增加别名仓库 ======================="
+            read -e -p "$(INFO '请输入别名域名: ')" alias_domain
+            read -e -p "$(INFO '请输入别名源: ')" alias_origin
+            read -e -p "$(INFO '请输入网关域名: ')" gateway_domain
+            SETUP_ALIAS "$alias_domain" "$alias_origin" "$gateway_domain"
+            UPDATE_TLS "$alias_domain"
+            fi
+}
 function UPDATE_TLS() {
-    local domain=${DOMAIN}
-    docker compose exec gateway certbot --nginx -n --rsa-key-size 4096 --agree-tos --register-unsafely-without-email --domains "${domain}"
-}
-function CONFIG_DOMAIN(){
-    INFO "======================= 开始配置用于拉取镜像的域名 ======================="
+    domain=${1:-}
 
-    read -e -p "$(INFO '输入用于拉取镜像的域名: ')" DOMAIN
-    if [[ "$DOMAIN" == "exit" ]]; then
-        WARN "退出域名和证书配置"
-        return
-    elif [[ -z "$DOMAIN" ]]; then
-        INFO "域名不能为空"
-        CONFIG_DOMAIN
-    else
-    GEN_NGINX_CONF
-    UPDATE_TLS
+    if [[ -z "${domain}" ]]; then
+        ERROR "domain is required"
+        exit 1
     fi
-}
 
-function STOP_REMOVE_CONTAINER() {
-    if [[ -f "${PROXY_DIR}/${DOCKER_COMPOSE_FILE}" ]]; then
-        INFO "停止和移除所有容器"
-        docker compose -f "${PROXY_DIR}/${DOCKER_COMPOSE_FILE}" down --remove-orphans
-    else 
-        WARN "容器未运行，无需删除"
+    function cert_renew() {
+        local domain=$1
+        docker-compose exec gateway certbot --nginx -n --rsa-key-size 4096 --agree-tos --register-unsafely-without-email --domains "${domain}"
+    }
+    INFO "正在为 ${domain} 申请ssl证书..."
+    cert_renew "${domain}" &>/tmp/cert_renew.log
+    is_error=`grep 'failed' /tmp/cert_renew.log|wc -l`
+
+    # 检查安装结果
+    if [ ${is_error} -ne 0 ]; then
+        ERROR "${domain} 申请ssl证书失败！请确认域名是否正确，并将域名解析到该服务器！"
+        ERROR "错误日志如下："
+        cat /tmp/cert_renew.log
         exit 1
     fi
 }
-
-
-
-
-# 更新配置
-function UPDATE_CONFIG() {
-while true; do
-    read -e -p "$(WARN '是否更新配置，更新前请确保您已备份现有配置，此操作不可逆? [y/n]: ')" update_conf
-    case "$update_conf" in
-        y|Y )
-            DOWN_CONFIG
-            RESTART_CONTAINER
-            break;;
-        n|N )
-            WARN "退出配置更新操作。"
-            break;;
-        * )
-            INFO "请输入 'y' 表示是，或者 'n' 表示否。";;
-    esac
-done
-
-}
-
-function REMOVE_NONE_TAG() {
-    docker images | grep "^${IMAGE_NAME}.*<none>" | awk '{print $3}' | xargs -r docker rmi
-    images=$(docker images ${IMAGE_NAME} --format '{{.Repository}}:{{.Tag}}')
-    latest=$(echo "$images" | sort -V | tail -n1)
-    for image in $images
-    do
-      if [ "$image" != "$latest" ];then
-        docker rmi $image
-      fi
-    done
-}
-
-
-function PACKAGE() {
-while true; do
-    read -e -p "$(INFO '是否执行软件包安装? [y/n]: ')" choice_package
-    case "$choice_package" in
-        y|Y )
-            INSTALL_PACKAGE
-            break;;
-        n|N )
-            WARN "跳过软件包安装步骤。"
-            break;;
-        * )
-            INFO "请输入 'y' 表示是，或者 'n' 表示否。";;
-    esac
-done
-}
-
-
-function INSTALL_WEB() {
-while true; do
-    read -e -p "$(INFO "是否安装WEB服务？[y/n]: ")" choice_service
-    if [[ "$choice_service" =~ ^[YyNn]$ ]]; then
-        if [[ "$choice_service" == "Y" || "$choice_service" == "y" ]]; then
-            while true; do
-                read -e -p "$(INFO "选择安装的WEB服务。安装Caddy可自动开启HTTPS [Nginx/Caddy]: ")" web_service
-                if [[ "$web_service" =~ ^(nginx|Nginx|caddy|Caddy)$ ]]; then
-                    if [[ "$web_service" == "nginx" || "$web_service" == "Nginx" ]]; then
-                        INSTALL_NGINX
-                        break
-                    elif [[ "$web_service" == "caddy" || "$web_service" == "Caddy" ]]; then
-                        INSTALL_CADDY
-                        break
-                    fi
-                else
-                    WARN "请输入'nginx' 或者 'caddy'"
-                fi
-            done
-            break
-        else
-            WARN "跳过WEB服务的安装。"
-            break
-        fi
-    else
-        INFO "请输入 'y' 表示是，或者 'n' 表示否。"
-    fi
-done
-}
-
-
-
-function UPDATE_SERVICE() {
-    services=(
-        "dockerhub"
-        "gcr"
-        "ghcr"
-        "quay"
-        "k8sgcr"
-    )
-
-    selected_services=()
-
-    WARN "更新服务请在docker compose文件存储目录下执行脚本.默认存储路径: ${PROXY_DIR}"
-    echo "-------------------------------------------------"
-    echo "1) docker hub"
-    echo "2) gcr"
-    echo "3) ghcr"
-    echo "4) quay"
-    echo "5) k8s-gcr"
-    echo "6) all"
-    echo "7) exit"
-    echo "-------------------------------------------------"
-
-    read -e -p "$(INFO '输入序号选择对应服务,空格分隔多个选项. all选择所有: ')" choices_service
-
-    if [[ "$choices_service" == "6" ]]; then
-        for choice in ${choices_service}; do
-            if [[ $choice =~ ^[0-9]+$ ]] && ((choice >0 && choice <= ${#services[@]})); then
-                service_name="${services[$((choice -1))]}"
-                #检查服务是否正在运行
-                if docker compose ps --services | grep -q "^${service_name}$"; then
-                    selected_services+=("$service_name")
-                    echo "更新的服务: ${selected_services[*]}"
-                else
-                    WARN "服务 ${service_name}未运行，跳过更新。"
-                fi
-            else
-                ERROR "无效的选择: $choice"
-                exit 2
-            fi
-        done
-    elif [[ "$choices_service" == "7" ]]; then
-        WARN "退出更新服务!"
-        exit 1
-    else
-        for choice in ${choices_service}; do
-            if [[ $choice =~ ^[0-9]+$ ]] && ((choice >0 && choice <= ${#services[@]})); then
-                service_name="${services[$((choice -1))]}"
-                #检查服务是否正在运行
-                if docker compose ps --services | grep -q "^${service_name}$"; then
-                    selected_services+=("$service_name")
-                else
-                    WARN "服务 ${service_name} 未运行，跳过更新。"
-                fi
-            else
-                ERROR "无效的选择: $choice"
-                exit 2
-            fi
-        done
-    fi
-}
-
-
-function PROMPT(){
-# 获取公网IP
-# PUBLIC_IP=$(curl -s https://ifconfig.me)
-# 域名
-DOMAIN=${DOMAIN}
-
-# 获取所有网络接口的IP地址
-# ALL_IPS=$(hostname -I)
-
-# 排除不需要的地址（127.0.0.1和docker0）
-# INTERNAL_IP=$(echo "$ALL_IPS" | awk '$1!="127.0.0.1" && $1!="::1" && $1!="docker0" {print $1}')
-
-echo
-INFO "=================感谢您的耐心等待，安装已经完成=================="
-INFO
-INFO "请用浏览器访问 UI 面板: "
-INFO "公网访问地址: http://$DOMAIN"
-# INFO "内网访问地址: http://$INTERNAL_IP:50000"
-INFO
-INFO "作者博客: https://dqzboy.com"
-INFO "技术交流: https://t.me/dqzboyblog"
-INFO "代码仓库: https://github.com/dqzboy/Docker-Proxy"
-INFO  
-INFO "如果使用的是云服务器，且配置了域名与证书，请至安全组开放80、443端口；否则开放对应服务的监听端口"
-INFO
-INFO "================================================================"
-}
-
 
 function main() {
 
@@ -955,8 +661,10 @@ INFO "====================== 请选择操作 ======================"
 echo "1) 新装服务"
 echo "2) 重启服务"
 echo "3) 更新服务"
-echo "4) 更新配置"
+# echo "4) 更新配置"
 echo "5) 卸载服务"
+echo "6) 增加网关"
+echo "7) 增加别名"
 read -e -p "$(INFO '输入对应数字并按 Enter 键: ')" user_choice
 case $user_choice in
     1)
@@ -966,11 +674,8 @@ case $user_choice in
         CHECKMEM
         CHECKFIRE
         PACKAGE
-        # INSTALL_WEB
         INSTALL_DOCKER
         INSTALL_DOCKER_PROXY
-        # 配置域名
-        CONFIG_DOMAIN
         PROMPT
         ;;
     2)
@@ -980,14 +685,13 @@ case $user_choice in
         ;;
     3)
         INFO "======================= 更新服务 ======================="
-        UPDATE_SERVICE
-        docker compose pull ${selected_services[*]}
-        docker compose up -d --force-recreate ${selected_services[*]}
+        docker compose pull
+        docker compose up -d --force-recreate
         INFO "======================= 更新完成 ======================="
         ;;
     4)
         INFO "======================= 更新配置 ======================="
-        UPDATE_CONFIG
+        docker compose restart
         INFO "======================= 更新完成 ======================="
         ;;
     5)
@@ -1013,9 +717,16 @@ case $user_choice in
             esac
         done
         ;;
+    6)
+        ADD_GATEWAY
+        ;;
+    7)
+        ADD_ALIAS
+        ;;
     *)
-        WARN "输入了无效的选择。请重新运行脚本并选择1-4的选项。"
+        WARN "输入了无效的选择。请重新运行脚本并选择1-7的选项。"
         ;;
 esac
 }
 main
+
