@@ -52,7 +52,7 @@ mkdir -p ${PROXY_DIR}
 cd "${PROXY_DIR}"
 
 # 项目RAW地址
-GITRAW="https://raw.githubusercontent.com/dqzboy/Docker-Proxy/main"
+GITRAW="https://raw.githubusercontent.com/gebangfeng/dockerproxy/main"
 
 # 部署的容器名称和镜像版本
 CONTAINER_NAME_LIST=("reg-docker-hub" "reg-ghcr" "reg-k8s-gcr")
@@ -652,11 +652,12 @@ function DOWN_CONFIG() {
 }
 
 function START_CONTAINER() {
-    if [ "$selected_all" = true ]; then
-        docker compose up -d --force-recreate
-    else
-        docker compose up -d "${selected_names[@]}" registry-ui
-    fi
+    # if [ "$selected_all" = true ]; then
+    #     docker compose up -d --force-recreate
+    # else
+    #     docker compose up -d "${selected_names[@]}" registry-ui
+    # fi
+    docker compose up -d --force-recreate
 }
 
 function RESTART_CONTAINER() {
@@ -668,16 +669,98 @@ function RESTART_CONTAINER() {
 }
 
 function INSTALL_DOCKER_PROXY() {
-INFO "======================= 开始安装Docker_Proxy ======================="
+INFO "======================= 开始安装Docker_proxy ======================="
 wget -P ${PROXY_DIR}/ ${GITRAW}/docker-compose.yaml &>/dev/null
 
 # config
-DOWN_CONFIG
+# DOWN_CONFIG
 
 # 安装服务
 START_CONTAINER
 }
+function GEN_NGINX_CONF() {
+    local domain=${DOMAIN}
+    local endpoint="crproxy:8080"
+    cat <<EOF
+server {
+    listen 80;
+    server_name ${domain};
+    server_tokens off;
 
+    access_log  /var/log/nginx/${domain}.access.log  main;
+
+    proxy_set_header  Host              \$http_host;   # required for docker client's sake
+    proxy_set_header  X-Real-IP         \$remote_addr; # pass on real client's IP
+    proxy_set_header  X-Forwarded-For   \$proxy_add_x_forwarded_for;
+    proxy_set_header  X-Forwarded-Proto \$scheme;
+    proxy_read_timeout                  900;
+    proxy_send_timeout                  300;
+
+    proxy_request_buffering             off; # (see issue #2292 - https://github.com/moby/moby/issues/2292)
+
+    # disable any limits to avoid HTTP 413 for large image uploads
+    client_max_body_size 0;
+
+    # required to avoid HTTP 411: see Issue #1486 (https://github.com/moby/moby/issues/1486)
+    chunked_transfer_encoding on;
+
+    location / {
+        root   /usr/share/nginx/html;
+        index  index.html index.htm;
+    }
+
+    #error_page  404              /404.html;
+
+    # redirect server error pages to the static page /50x.html
+    #
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+
+    # # (Options) docker.io uses aliyuncs mirror 😄
+    # location ~ ^/v2/docker.io/(.+)\$  {
+    #    return 302 https://public.mirror.aliyuncs.com/v2/\$1;
+    # }
+
+    # Read only, Reject all writes !!!!!!!!!!
+    if (\$request_method !~* GET|HEAD) {
+        return 403;
+    }
+
+    location /v2/ {
+        proxy_pass http://${endpoint};
+    }
+}
+EOF
+
+conf="${PROXY_DIR}/nginx/gateway-${domain}.conf"
+
+if [[ ! -f "${conf}" ]]; then
+  mkdir -p nginx
+  gen "${domain}" "${endpoint}" >"${PROXY_DIR}/nginx/gateway-${domain}.conf"
+fi
+}
+
+function UPDATE_TLS() {
+    local domain=${DOMAIN}
+    docker compose exec gateway certbot --nginx -n --rsa-key-size 4096 --agree-tos --register-unsafely-without-email --domains "${domain}"
+}
+function CONFIG_DOMAIN(){
+    INFO "======================= 开始配置用于拉取镜像的域名 ======================="
+
+    read -e -p "$(INFO '输入用于拉取镜像的域名: ')" DOMAIN
+    if [[ "$DOMAIN" == "exit" ]]; then
+        WARN "退出域名和证书配置"
+        return
+    elif [[ -z "$DOMAIN" ]]; then
+        INFO "域名不能为空"
+        CONFIG_DOMAIN
+    else
+    GEN_NGINX_CONF
+    UPDATE_TLS
+    fi
+}
 
 function STOP_REMOVE_CONTAINER() {
     if [[ -f "${PROXY_DIR}/${DOCKER_COMPOSE_FILE}" ]]; then
@@ -837,20 +920,22 @@ function UPDATE_SERVICE() {
 
 function PROMPT(){
 # 获取公网IP
-PUBLIC_IP=$(curl -s https://ifconfig.me)
+# PUBLIC_IP=$(curl -s https://ifconfig.me)
+# 域名
+DOMAIN=${DOMAIN}
 
 # 获取所有网络接口的IP地址
-ALL_IPS=$(hostname -I)
+# ALL_IPS=$(hostname -I)
 
 # 排除不需要的地址（127.0.0.1和docker0）
-INTERNAL_IP=$(echo "$ALL_IPS" | awk '$1!="127.0.0.1" && $1!="::1" && $1!="docker0" {print $1}')
+# INTERNAL_IP=$(echo "$ALL_IPS" | awk '$1!="127.0.0.1" && $1!="::1" && $1!="docker0" {print $1}')
 
 echo
 INFO "=================感谢您的耐心等待，安装已经完成=================="
 INFO
 INFO "请用浏览器访问 UI 面板: "
-INFO "公网访问地址: http://$PUBLIC_IP:50000"
-INFO "内网访问地址: http://$INTERNAL_IP:50000"
+INFO "公网访问地址: http://$DOMAIN"
+# INFO "内网访问地址: http://$INTERNAL_IP:50000"
 INFO
 INFO "作者博客: https://dqzboy.com"
 INFO "技术交流: https://t.me/dqzboyblog"
@@ -882,6 +967,8 @@ case $user_choice in
         # INSTALL_WEB
         INSTALL_DOCKER
         INSTALL_DOCKER_PROXY
+        # 配置域名
+        CONFIG_DOMAIN
         PROMPT
         ;;
     2)
