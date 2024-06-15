@@ -48,6 +48,7 @@ function WARN() {
 
 # 服务部署和配置持久华存储路径
 PROXY_DIR="/data/registry-proxy"
+GATEWAY_FILES=$(ls ${PROXY_DIR}/nginx/gateway-*.conf)
 mkdir -p ${PROXY_DIR}
 cd "${PROXY_DIR}"
 
@@ -489,7 +490,35 @@ INFO "如果使用的是云服务器，请在安全组中开放80,443端口"
 INFO
 INFO "================================================================"
 }
+function SELECT_GATEWAY() {
+    
+if [ -z "$GATEWAY_FILES" ]; then
+  ERROR "没有找到任何网关域名配置文件,请先添加网关"
+  exit 1
+fi
 
+GATEWAYS=()
+for file in $GATEWAY_FILES; do
+  domain=$(basename $file | sed 's/gateway-//; s/.conf//')
+  GATEWAYS+=($domain)
+done
+
+if [ ${#GATEWAYS[@]} -eq 1 ]; then
+  GETEWAY=${GATEWAYS[0]}
+  INFO "找到一个网关域名：$GETEWAY"
+else
+  INFO "找到多个网关域名："
+  select domain in "${GATEWAYS[@]}"; do
+    if [[ " ${GATEWAYS[@]} " =~ " ${domain} " ]]; then
+      GETEWAY=$domain
+      INFO "选择的网关域名是：$GETEWAY"
+      break
+    else
+      ERROR "无效选择，请重试。"
+    fi
+  done
+fi
+}
 function SETUP_GATEWAY() {
     domain=${1:-}
 
@@ -571,14 +600,14 @@ function SETUP_ALIAS() {
     origin=${2:-}
 
     if [[ -z "${origin}" ]]; then
-        echo "origin is required"
+        ERROR "origin is required"
         exit 1
     fi
 
     gateway=${3:-}
 
     if [[ -z "${gateway}" ]]; then
-        echo "gateway is required"
+        ERROR "gateway is required"
         exit 1
     fi
 
@@ -623,7 +652,23 @@ function ADD_GATEWAY(){
         gateway_endpoint=${gateway_endpoint:-$DEFAULT_GATEWAY}
         SETUP_GATEWAY "$gateway_domain" "$gateway_endpoint"
         UPDATE_TLS "$gateway_domain"
+        INFO "${gateway_domain} 域名配置成功！"
+}
+function ADD_COMMON_ALIAS() {
+        INFO "======================= 增加常用别名仓库 ======================="
+        if [[ ! -z ${gateway_domain} ]];then
+            GETEWAY="${gateway_domain}"
+        else 
+            SELECT_GATEWAY
+        fi
         
+        for alias in "${ALIASES[@]}"; do
+            local name=$(echo $alias | cut -d' ' -f1)
+            local original=$(echo $alias | cut -d' ' -f2)
+            ADD_ALIAS "${name}.${GETEWAY}" "${original}" "${GETEWAY}"
+        done
+        #常用别名仓库已经添加的标志
+        common_alias_domain=1
 }
 function INIT_ALIAS(){
     while true; do
@@ -631,15 +676,7 @@ function INIT_ALIAS(){
     case "$configure_alias_domain" in
         y|Y )
 
-                INFO "======================= 增加常用别名仓库 ======================="
-                GETEWAY="${gateway_domain}"
-                for alias in "${ALIASES[@]}"; do
-                    local name=$(echo $alias | cut -d' ' -f1)
-                    local original=$(echo $alias | cut -d' ' -f2)
-                    ADD_ALIAS "${name}.${gateway_domain}" "${original}" "${GETEWAY}"
-                done
-                #常用别名仓库已经添加的标志
-                common_alias_domain=1
+                ADD_COMMON_ALIAS
                 break;;
         n|N )
             break;;
@@ -702,6 +739,7 @@ echo "3) 更新服务"
 echo "5) 卸载服务"
 echo "6) 增加网关"
 echo "7) 增加别名"
+echo "8) 增加常用仓库别名"
 read -e -p "$(INFO '输入对应数字并按 Enter 键: ')" user_choice
 case $user_choice in
     1)
@@ -759,6 +797,28 @@ case $user_choice in
         ;;
     7)
         ADD_ALIAS
+        ;;
+    8)
+        ADD_COMMON_ALIAS
+    
+    INFO 
+    INFO 
+    if [[ ${common_alias_domain} -eq 1 ]]; then
+    INFO "=================常用别名仓库添加已经完成=================="
+    INFO "你已经添加常用别名仓库，也可以使用替换前缀方式拉取镜像: "
+    INFO "源镜像拉取地址: docker pull quay.io/argoproj/argocd:v2.11.0"
+    INFO "替换前缀拉取地址：docker pull quay.${gateway_domain}/argoproj/argocd:v2.11.0"
+    INFO 
+    INFO 
+    INFO "别名仓库列表如下:"
+    GETEWAY="${gateway_domain}"
+    for alias in "${ALIASES[@]}"; do
+        local name=$(echo $alias | cut -d' ' -f1)
+        local original=$(echo $alias | cut -d' ' -f2)
+        INFO "原仓库: ${original} 别名仓库:${name}.${gateway_domain}"
+    done
+  INFO "===================================================="
+  fi
         ;;
     *)
         WARN "输入了无效的选择。请重新运行脚本并选择1-7的选项。"
