@@ -534,7 +534,7 @@ function SETUP_ALIAS() {
 
     if [[ -z "${domain}" ]]; then
         ERROR "domain is required"
-        exit 1
+        ADD_ALIAS
     fi
 
     origin=${2:-}
