@@ -5,9 +5,10 @@
 # 
 #         USAGE: ./DockerProxy_Install.sh
 #
-#   DESCRIPTION: 建Docker镜像加速服务，基于官方 registry 一键部署Docker、K8s、ghcr镜像加速\管理服务.
+#   DESCRIPTION: 自建Docker镜像加速服务，基于crproxy项目 一键部署Docker、K8s、ghcr镜像加速\管理服务.
+#   GITHUB: https://github.com/gebangfeng/dockerproxy
 # 
-#  ORGANIZATION: DingQz dqzboy.com 浅时光博客
+#  ORGANIZATION: 参考项目：https://github.com/dqzboy/Docker-Proxy/
 #===============================================================================
 
 echo
@@ -23,7 +24,6 @@ cat << EOF
 EOF
 
 echo "----------------------------------------------------------------------------------------------------------"
-# echo -e "\033[32m机场推荐\033[0m(\033[34m按量不限时，解锁ChatGPT\033[0m)：\033[34;4mhttps://mojie.mx/#/register?code=CG6h8Irm\033[0m"
 echo "----------------------------------------------------------------------------------------------------------"
 echo
 echo
