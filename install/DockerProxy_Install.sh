@@ -56,8 +56,8 @@ GITRAW="https://raw.githubusercontent.com/gebangfeng/dockerproxy/main"
 
 # 部署的容器名称和镜像版本
 # CONTAINER_NAME_LIST=("reg-docker-hub" "reg-ghcr" "reg-k8s-gcr")
-IMAGE_NAME="ghcr.io/wzshiming/nginx-certbot"
-CRPROXY_IMAGE_NAME="ghcr.io/wzshiming/crproxy/crproxy"
+IMAGE_NAME="gebangfeng/nginx-certbot"
+CRPROXY_IMAGE_NAME="gebangfeng/crproxy"
 DOCKER_COMPOSE_FILE="docker-compose.yaml"
 # 定义常用仓库别名数组
 ALIASES=(
@@ -78,7 +78,6 @@ DEFAULT_GATEWAY="crproxy:8080"
 # 定义安装重试次数
 attempts=0
 maxAttempts=3
-
 
 function CHECK_OS() {
 INFO "======================= 检查环境 ======================="
@@ -377,6 +376,38 @@ function INSTALL_DOCKER_PROXY() {
 INFO "======================= 开始安装DOCKER PROXY ======================="
 wget -P ${PROXY_DIR}/ ${GITRAW}/docker-compose.yaml &>/dev/null
 
+# 创建index.html文件
+mkdir -p ${PROXY_DIR}/html
+cat <<EOL > ${PROXY_DIR}/html/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Container Registry Proxy</title>
+    <meta http-equiv="refresh" content="0; url=https://github.com/kubesre/docker-registry-mirrors">
+</head>
+<body>
+ <div style="text-align: center;">
+     <p>
+        Prefixes the image used with 'cr.zsm.io'
+     </p>
+     <p>
+         <b> Source: </b> <a href="https://github.com/kubesre/docker-registry-mirrors">https://github.com/kubesre/docker-registry-mirrors</a>
+     </p>
+ </div>
+</body>
+<script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?24a74e1829c29d7bd728482105e6f638";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+</html>
+EOL
+
 # 安装服务
 START_CONTAINER
 }
@@ -646,7 +677,7 @@ function UPDATE_TLS() {
 
     function cert_renew() {
         local domain=$1
-        docker-compose exec gateway certbot --nginx -n --rsa-key-size 4096 --agree-tos --register-unsafely-without-email --domains "${domain}"
+        docker compose exec gateway certbot --nginx -n --rsa-key-size 4096 --agree-tos --register-unsafely-without-email --domains "${domain}"
     }
     INFO "正在为 ${domain} 申请ssl证书..."
     cert_renew "${domain}" &>/tmp/cert_renew.log
@@ -735,4 +766,3 @@ case $user_choice in
 esac
 }
 main
-
