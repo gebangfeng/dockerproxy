@@ -56,8 +56,8 @@ GITRAW="https://raw.githubusercontent.com/gebangfeng/dockerproxy/main"
 
 # 部署的容器名称和镜像版本
 # CONTAINER_NAME_LIST=("reg-docker-hub" "reg-ghcr" "reg-k8s-gcr")
-IMAGE_NAME_LIST=("ghcr.io/wzshiming/nginx-certbot" "ghcr.io/wzshiming/crproxy/crproxy")
-# UI_IMAGE_NAME="dqzboy/docker-registry-ui"
+IMAGE_NAME="ghcr.io/wzshiming/nginx-certbot"
+UI_IMAGE_NAME="ghcr.io/wzshiming/crproxy/crproxy"
 DOCKER_COMPOSE_FILE="docker-compose.yaml"
 # 定义常用仓库别名数组
 ALIASES=(
@@ -392,7 +392,6 @@ function STOP_REMOVE_CONTAINER() {
 }
 
 function REMOVE_NONE_TAG() {
-    for IMAGE_NAME in ${IMAGE_NAME_LIST[@]}:do
     docker images | grep "^${IMAGE_NAME}.*<none>" | awk '{print $3}' | xargs -r docker rmi
     images=$(docker images ${IMAGE_NAME} --format '{{.Repository}}:{{.Tag}}')
     latest=$(echo "$images" | sort -V | tail -n1)
@@ -401,7 +400,6 @@ function REMOVE_NONE_TAG() {
       if [ "$image" != "$latest" ];then
         docker rmi $image
       fi
-    done
     done
 }
 
