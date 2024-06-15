@@ -57,7 +57,7 @@ GITRAW="https://raw.githubusercontent.com/gebangfeng/dockerproxy/main"
 # 部署的容器名称和镜像版本
 # CONTAINER_NAME_LIST=("reg-docker-hub" "reg-ghcr" "reg-k8s-gcr")
 IMAGE_NAME="ghcr.io/wzshiming/nginx-certbot"
-UI_IMAGE_NAME="ghcr.io/wzshiming/crproxy/crproxy"
+CRPROXY_IMAGE_NAME="ghcr.io/wzshiming/crproxy/crproxy"
 DOCKER_COMPOSE_FILE="docker-compose.yaml"
 # 定义常用仓库别名数组
 ALIASES=(
@@ -710,7 +710,7 @@ case $user_choice in
                     STOP_REMOVE_CONTAINER
                     REMOVE_NONE_TAG
                     docker rmi --force $(docker images -q ${IMAGE_NAME}) &>/dev/null
-                    docker rmi --force $(docker images -q ${UI_IMAGE_NAME}) &>/dev/null
+                    docker rmi --force $(docker images -q ${CRPROXY_IMAGE_NAME}) &>/dev/null
                     rm -rf ${PROXY_DIR} &>/dev/null
                     INFO "服务已经卸载,感谢你的使用!"
                     INFO "========================================================"
